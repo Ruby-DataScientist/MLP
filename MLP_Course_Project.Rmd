@@ -1,0 +1,129 @@
+---
+title: "Machine Learning Project"
+author: "R"
+date: "23/10/2020"
+output: html_document
+---
+
+
+### One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.
+### The goal of this project is to predict the manner in which they did the exercise in terms of quality.
+```{r echo=TRUE}
+#Setting Seed and InCluding required Libraries
+set.seed(54321)
+library(caret); library(ggplot2); library(reshape2);library(gridExtra); library(dplyr)
+
+#Download Data (Training and Testing)
+url_train <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+train_data <- read.csv(url_train, na.strings = c("", "NA"))
+url_validation <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+validation_data <- read.csv(url_validation, na.strings = c("", "NA"))
+
+```
+
+### Delete the column that contains NA to avoid the error
+
+```{r echo=TRUE}
+colname <- colnames(train_data)[!colSums(is.na(train_data)) > 0]
+colname
+
+```
+
+### In addition, in order to make accurate predictions, columns that is not related exercise must also be deleted. In particular “X”, “user_name”, “raw_timestamp_part_1”, “raw_timestamp_part_2”, “cvtd_timestamp”, “new_window”, “num_window” are deleted.
+
+```{r echo=TRUE}
+#Slice data related with exercise(extract relevant data)
+colname <- colname[8: length(colname)]
+data_wo_NA <- train_data[colname]
+
+```
+### Check the validation data for NA values
+
+```{r echo=TRUE}
+#Check the colnames of data Without NA values in validation_data.
+#The last colname is "classe"
+is.element(colname, colnames(validation_data))
+
+```
+
+### Partitioning the data
+
+```{r echo=TRUE}
+inTrain = createDataPartition(data_wo_NA$classe, p = 3/4)[[1]]
+training = data_wo_NA[ inTrain,]
+testing = data_wo_NA[-inTrain,]
+
+```
+
+
+### Exploring the model 
+
+```{r echo=TRUE}
+
+library(rattle)
+fit_tree <- train(classe ~ ., method="rpart", data=training)
+fancyRpartPlot(fit_tree$finalModel)
+
+```
+
+
+### Dealing with Dependent Variables : There are few dependent variables which will create problem while processing in RANDOM FOREST. We will verify with correlation matrix
+
+
+
+```{r echo=TRUE}
+#Dealing with Dependent Variables
+
+cor.matrix <- cor(training[sapply(training, is.numeric)])
+c <- melt(cor.matrix)
+qplot(x=Var1, y=Var2, data=c, fill=value, geom="tile") +
+    scale_fill_gradient2(limits=c(-1, 1)) +
+    theme(axis.text.x = element_text(angle=-90, vjust=0.5, hjust=0))
+
+```
+
+### As we can see above there are predictor variables which are correlated.Some of them are highly correlated.We will pare down the dataset by removing highly correlated variables(>0.9)
+
+
+
+```{r echo=TRUE}
+
+c <- findCorrelation(cor.matrix, cutoff = .90)
+training <- training[,-c]
+testing <- testing[,-c]
+
+
+```
+
+### Creating Random Forest
+
+```{r echo=TRUE}
+#RANDOM FOREST
+library(randomForest)
+mtry <- tuneRF(training[,-46], training$classe, ntreeTry=500, stepFactor=1.5,improve=0.01, 
+              plot=FALSE, trace=TRUE, dobest=FALSE)
+modfit_rf <- randomForest(classe~.,data=training, mtry=9, ntree=500)
+
+
+
+```
+
+### Testing the model with Test dataset and varifying the accuracy with the help of Confusion Matrix
+
+
+
+```{r echo=TRUE}
+pred <- predict(modfit_rf, testing)
+confusionMatrix(pred, testing$classe)
+```
+
+
+### Predictions :
+### Testing the model on validation data:
+```{r echo=TRUE}    
+pred_val <- predict(modfit_rf, validation_data)
+pred_val
+
+
+```
+
